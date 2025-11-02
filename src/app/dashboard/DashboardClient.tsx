@@ -53,13 +53,23 @@ const dedupeBySlug = (items: BlogDraft[]) => {
   });
 };
 
+const sortByDateDesc = (items: BlogDraft[]) => {
+  return [...items].sort((a, b) => {
+    const aTime = a.date ? new Date(a.date).getTime() : 0;
+    const bTime = b.date ? new Date(b.date).getTime() : 0;
+    return bTime - aTime;
+  });
+};
+
 export default function DashboardClient() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [credentials, setCredentials] = useState({ username: "", password: "" });
   const [draft, setDraft] = useState<BlogDraft>(emptyDraft);
   const [drafts, setDrafts] = useState<BlogDraft[]>([]);
-  const [published, setPublished] = useState<BlogDraft[]>(defaultPublished);
+  const [published, setPublished] = useState<BlogDraft[]>(
+    sortByDateDesc(defaultPublished),
+  );
   const [trash, setTrash] = useState<BlogDraft[]>([]);
   const [activeTab, setActiveTab] = useState<"published" | "trash">("published");
   const [isStorageReady, setIsStorageReady] = useState(false);
@@ -85,17 +95,22 @@ export default function DashboardClient() {
       const loaded = dedupeBySlug(
         parseStoredPosts(storedPublished, defaultPublished),
       );
-      setPublished(loaded);
+      const ordered = sortByDateDesc(loaded);
+      setPublished(ordered);
     } else {
+      const orderedDefaults = sortByDateDesc(defaultPublished);
       window.localStorage.setItem(
         storage.published,
-        JSON.stringify(defaultPublished),
+        JSON.stringify(orderedDefaults),
       );
-      setPublished(defaultPublished);
+      setPublished(orderedDefaults);
     }
 
     if (storedTrash) {
-      setTrash(dedupeBySlug(parseStoredPosts(storedTrash)));
+      const orderedTrash = sortByDateDesc(
+        dedupeBySlug(parseStoredPosts(storedTrash)),
+      );
+      setTrash(orderedTrash);
     }
 
     setIsStorageReady(true);
@@ -197,7 +212,7 @@ export default function DashboardClient() {
 
     setPublished((prev) => {
       const withoutDuplicate = prev.filter((item) => item.slug !== preparedDraft.slug);
-      return [preparedDraft, ...withoutDuplicate];
+      return sortByDateDesc([preparedDraft, ...withoutDuplicate]);
     });
     setTrash((prev) => prev.filter((item) => item.slug !== preparedDraft.slug));
     setDrafts((prev) => prev.filter((item) => item.slug !== preparedDraft.slug));
@@ -215,7 +230,7 @@ export default function DashboardClient() {
     setPublished((prev) => prev.filter((item) => item.slug !== slug));
     setTrash((prev) => {
       const withoutDuplicate = prev.filter((item) => item.slug !== slug);
-      return [post, ...withoutDuplicate];
+      return sortByDateDesc([post, ...withoutDuplicate]);
     });
     setStatusMessage(`"${post.title}" moved to trash.`);
   };
@@ -227,7 +242,7 @@ export default function DashboardClient() {
     setTrash((prev) => prev.filter((item) => item.slug !== slug));
     setPublished((prev) => {
       const withoutDuplicate = prev.filter((item) => item.slug !== slug);
-      return [post, ...withoutDuplicate];
+      return sortByDateDesc([post, ...withoutDuplicate]);
     });
     setActiveTab("published");
     setStatusMessage(`"${post.title}" restored and republished.`);
