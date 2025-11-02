@@ -1,0 +1,49 @@
+{
+  "name": "orbitwelve",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "export": "next export"
+  },
+  "dependencies": {
+    "@react-google-maps/api": "^2.20.7",
+    "@supabase/supabase-js": "^2.76.1",
+    "@tailwindplus/elements": "^1.0.17",
+    "@types/react-simple-maps": "^3.0.6",
+    "@upstash/redis": "^1.35.5",
+    "@vercel/speed-insights": "^1.2.0",
+    "d3": "^7.9.0",
+    "d3-geo": "^3.1.1",
+    "framer-motion": "^12.23.22",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.545.0",
+    "next": "15.5.4",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-icons": "^5.5.0",
+    "react-leaflet": "^5.0.0",
+    "react-simple-maps": "^3.0.0",
+    "topojson-client": "^3.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/d3": "^7.4.3",
+    "@types/google.maps": "^3.58.1",
+    "@types/leaflet": "^1.9.21",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/topojson-client": "^3.1.5",
+    "@types/webpack": "^5.28.5",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.4",
+    "tailwindcss": "^4.1.14",
+    "@tailwindcss/typography": "^1.4.0",
+    "typescript": "^5"
+  }
+}
