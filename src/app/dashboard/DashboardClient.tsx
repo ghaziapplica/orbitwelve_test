@@ -1,15 +1,18 @@
 'use client';
 
-import blogPosts from "@/data/blog";
-import {
-  DASHBOARD_STORAGE_KEYS,
-  normalizeBlogPost,
-  parseStoredPosts,
-  type BlogRecord,
-} from "@/lib/blogStorage";
 import { useEffect, useMemo, useState } from "react";
 
-type BlogDraft = BlogRecord;
+type BlogDraft = {
+  title: string;
+  slug: string;
+  author: string;
+  date: string;
+  topic: string;
+  excerpt: string;
+  image: string;
+  content: string;
+  featured: boolean;
+};
 
 const DASHBOARD_USERNAME = "orbitwelve-admin";
 const DASHBOARD_PASSWORD = "OrbitwelveBlog#2024";
@@ -26,7 +29,10 @@ const emptyDraft: BlogDraft = {
   featured: false,
 };
 
-const storage = DASHBOARD_STORAGE_KEYS;
+const storage = {
+  auth: "orbitwelve-dashboard-auth",
+  drafts: "orbitwelve-dashboard-drafts",
+};
 
 const toSlug = (value: string) =>
   value
@@ -36,43 +42,12 @@ const toSlug = (value: string) =>
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
 
-const defaultPublished: BlogDraft[] = blogPosts.map((post) =>
-  normalizeBlogPost({
-    ...post,
-    topic: post.topic,
-    image: post.image,
-  }),
-);
-
-const dedupeBySlug = (items: BlogDraft[]) => {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    if (seen.has(item.slug)) return false;
-    seen.add(item.slug);
-    return true;
-  });
-};
-
-const sortByDateDesc = (items: BlogDraft[]) => {
-  return [...items].sort((a, b) => {
-    const aTime = a.date ? new Date(a.date).getTime() : 0;
-    const bTime = b.date ? new Date(b.date).getTime() : 0;
-    return bTime - aTime;
-  });
-};
-
 export default function DashboardClient() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [credentials, setCredentials] = useState({ username: "", password: "" });
   const [draft, setDraft] = useState<BlogDraft>(emptyDraft);
   const [drafts, setDrafts] = useState<BlogDraft[]>([]);
-  const [published, setPublished] = useState<BlogDraft[]>(
-    sortByDateDesc(defaultPublished),
-  );
-  const [trash, setTrash] = useState<BlogDraft[]>([]);
-  const [activeTab, setActiveTab] = useState<"published" | "trash">("published");
-  const [isStorageReady, setIsStorageReady] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -85,51 +60,19 @@ export default function DashboardClient() {
 
     const storedDrafts = window.localStorage.getItem(storage.drafts);
     if (storedDrafts) {
-      setDrafts(parseStoredPosts(storedDrafts));
+      try {
+        const parsed = JSON.parse(storedDrafts) as BlogDraft[];
+        setDrafts(parsed);
+      } catch {
+        // If stored data can't be parsed we ignore it
+      }
     }
-
-    const storedPublished = window.localStorage.getItem(storage.published);
-    const storedTrash = window.localStorage.getItem(storage.trash);
-
-    if (storedPublished) {
-      const loaded = dedupeBySlug(
-        parseStoredPosts(storedPublished, defaultPublished),
-      );
-      const ordered = sortByDateDesc(loaded);
-      setPublished(ordered);
-    } else {
-      const orderedDefaults = sortByDateDesc(defaultPublished);
-      window.localStorage.setItem(
-        storage.published,
-        JSON.stringify(orderedDefaults),
-      );
-      setPublished(orderedDefaults);
-    }
-
-    if (storedTrash) {
-      const orderedTrash = sortByDateDesc(
-        dedupeBySlug(parseStoredPosts(storedTrash)),
-      );
-      setTrash(orderedTrash);
-    }
-
-    setIsStorageReady(true);
   }, []);
 
   useEffect(() => {
-    if (!isStorageReady || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
     window.localStorage.setItem(storage.drafts, JSON.stringify(drafts));
-  }, [drafts, isStorageReady]);
-
-  useEffect(() => {
-    if (!isStorageReady || typeof window === "undefined") return;
-    window.localStorage.setItem(storage.published, JSON.stringify(published));
-  }, [published, isStorageReady]);
-
-  useEffect(() => {
-    if (!isStorageReady || typeof window === "undefined") return;
-    window.localStorage.setItem(storage.trash, JSON.stringify(trash));
-  }, [trash, isStorageReady]);
+  }, [drafts]);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -157,34 +100,15 @@ export default function DashboardClient() {
     setDraft((prev) => ({ ...prev, [key]: value }));
   };
 
-  const prepareBlog = (): BlogDraft => {
-    const sanitizedTitle = draft.title.trim();
-    const sanitizedSlug = (draft.slug || toSlug(draft.title)).trim();
-    const sanitizedTopic = draft.topic?.trim();
-    const sanitizedImage = draft.image?.trim();
-    const sanitizedExcerpt = draft.excerpt.trim();
-    const sanitizedContent = draft.content.trim();
-
-    return normalizeBlogPost({
-      ...draft,
-      title: sanitizedTitle,
-      slug: sanitizedSlug,
-      date: draft.date || new Date().toISOString().slice(0, 10),
-      topic: sanitizedTopic ? sanitizedTopic : undefined,
-      image: sanitizedImage ? sanitizedImage : undefined,
-      excerpt: sanitizedExcerpt,
-      content: sanitizedContent,
-    });
-  };
-
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const preparedDraft = prepareBlog();
+    const preparedDraft: BlogDraft = {
+      ...draft,
+      slug: draft.slug || toSlug(draft.title),
+      date: draft.date || new Date().toISOString().slice(0, 10),
+    };
 
-    setDrafts((prev) => {
-      const withoutDuplicate = prev.filter((item) => item.slug !== preparedDraft.slug);
-      return [preparedDraft, ...withoutDuplicate];
-    });
+    setDrafts((prev) => [preparedDraft, ...prev]);
     setDraft({ ...emptyDraft, author: draft.author });
     setStatusMessage("Draft saved locally. Copy the JSON to update src/data/blog.ts.");
   };
@@ -198,77 +122,7 @@ export default function DashboardClient() {
     }
   };
 
-  const handlePublish = () => {
-    if (!draft.title.trim()) {
-      setStatusMessage("Please add a title before publishing.");
-      return;
-    }
-
-    const preparedDraft = prepareBlog();
-    if (!preparedDraft.slug) {
-      setStatusMessage("Please provide a valid slug before publishing.");
-      return;
-    }
-
-    setPublished((prev) => {
-      const withoutDuplicate = prev.filter((item) => item.slug !== preparedDraft.slug);
-      return sortByDateDesc([preparedDraft, ...withoutDuplicate]);
-    });
-    setTrash((prev) => prev.filter((item) => item.slug !== preparedDraft.slug));
-    setDrafts((prev) => prev.filter((item) => item.slug !== preparedDraft.slug));
-    setDraft({ ...emptyDraft, author: draft.author });
-    setActiveTab("published");
-    setStatusMessage(
-      `"${preparedDraft.title}" published. It now appears on the blog page.`,
-    );
-  };
-
-  const handleMoveToTrash = (slug: string) => {
-    const post = published.find((item) => item.slug === slug);
-    if (!post) return;
-
-    setPublished((prev) => prev.filter((item) => item.slug !== slug));
-    setTrash((prev) => {
-      const withoutDuplicate = prev.filter((item) => item.slug !== slug);
-      return sortByDateDesc([post, ...withoutDuplicate]);
-    });
-    setStatusMessage(`"${post.title}" moved to trash.`);
-  };
-
-  const handleRestore = (slug: string) => {
-    const post = trash.find((item) => item.slug === slug);
-    if (!post) return;
-
-    setTrash((prev) => prev.filter((item) => item.slug !== slug));
-    setPublished((prev) => {
-      const withoutDuplicate = prev.filter((item) => item.slug !== slug);
-      return sortByDateDesc([post, ...withoutDuplicate]);
-    });
-    setActiveTab("published");
-    setStatusMessage(`"${post.title}" restored and republished.`);
-  };
-
-  const handleDeleteForever = (slug: string) => {
-    const post = trash.find((item) => item.slug === slug);
-    if (!post) return;
-
-    setTrash((prev) => prev.filter((item) => item.slug !== slug));
-    setStatusMessage(`"${post.title}" permanently removed.`);
-  };
-
-  const handleLoadIntoEditor = (item: BlogDraft) => {
-    setDraft({
-      ...item,
-      topic: item.topic ?? "",
-      image: item.image ?? "",
-    });
-    setStatusMessage(`Loaded "${item.title}" into the editor.`);
-  };
-
-  const jsonPreview = useMemo(
-    () => JSON.stringify(prepareBlog(), null, 2),
-    [draft],
-  );
+  const jsonPreview = useMemo(() => JSON.stringify(draft, null, 2), [draft]);
 
   if (!isAuthenticated) {
     return (
@@ -402,7 +256,7 @@ export default function DashboardClient() {
               <label className="space-y-2 text-sm">
                 <span>Slug</span>
                 <input
-                  value={draft.slug ?? ""}
+                  value={draft.slug}
                   onChange={(event) => handleFieldChange("slug", event.target.value)}
                   placeholder="my-new-post"
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm focus:border-[#1098D5] focus:outline-none focus:ring-2 focus:ring-[#1098D5]/40"
@@ -431,7 +285,7 @@ export default function DashboardClient() {
               <label className="space-y-2 text-sm">
                 <span>Topic / Category</span>
                 <input
-                  value={draft.topic ?? ""}
+                  value={draft.topic}
                   onChange={(event) => handleFieldChange("topic", event.target.value)}
                   placeholder="Security, Marketing, ..."
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm focus:border-[#1098D5] focus:outline-none focus:ring-2 focus:ring-[#1098D5]/40"
@@ -440,7 +294,7 @@ export default function DashboardClient() {
               <label className="space-y-2 text-sm">
                 <span>Cover image URL</span>
                 <input
-                  value={draft.image ?? ""}
+                  value={draft.image}
                   onChange={(event) => handleFieldChange("image", event.target.value)}
                   placeholder="https://..."
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm focus:border-[#1098D5] focus:outline-none focus:ring-2 focus:ring-[#1098D5]/40"
@@ -482,9 +336,9 @@ export default function DashboardClient() {
               Mark as featured post
             </label>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
               <button
-                type="button"
+                type="reset"
                 onClick={() => setDraft({ ...emptyDraft, author: draft.author })}
                 className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-red-400 hover:text-red-300"
               >
@@ -492,16 +346,9 @@ export default function DashboardClient() {
               </button>
               <button
                 type="submit"
-                className="rounded-lg border border-[#1098D5]/70 px-6 py-2 text-sm font-semibold text-[#1098D5] transition hover:border-[#0d7cad] hover:text-[#0d7cad]"
+                className="rounded-lg bg-[#1098D5] px-6 py-2 text-sm font-semibold text-white transition hover:bg-[#0d7cad]"
               >
                 Save draft
-              </button>
-              <button
-                type="button"
-                onClick={handlePublish}
-                className="rounded-lg bg-[#1098D5] px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0d7cad]"
-              >
-                Publish blog
               </button>
             </div>
           </form>
@@ -517,196 +364,6 @@ export default function DashboardClient() {
             </pre>
           </aside>
         </div>
-
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">
-                {activeTab === "published" ? "Published blogs" : "Trash"}
-              </h2>
-              <p className="text-xs text-slate-400">
-                {activeTab === "published"
-                  ? "Blogs visible on orbitwelve.com/blog."
-                  : "Posts kept off the site. Restore to republish."}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 p-1 text-xs">
-              <button
-                type="button"
-                onClick={() => setActiveTab("published")}
-                className={`rounded-full px-3 py-1 transition ${
-                  activeTab === "published"
-                    ? "bg-[#1098D5] text-white"
-                    : "text-slate-300 hover:text-white"
-                }`}
-              >
-                Published ({published.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("trash")}
-                className={`rounded-full px-3 py-1 transition ${
-                  activeTab === "trash"
-                    ? "bg-slate-800 text-white"
-                    : "text-slate-300 hover:text-white"
-                }`}
-              >
-                Trash ({trash.length})
-              </button>
-            </div>
-          </div>
-
-          {activeTab === "published" ? (
-            published.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                Publish a blog to have it appear here and on the live blog page.
-              </p>
-            ) : (
-              <ul className="grid gap-4 md:grid-cols-2">
-                {published.map((item) => (
-                  <li
-                    key={`published-${item.slug}`}
-                    className="rounded-xl border border-slate-800 bg-slate-900/80 p-5"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <h3 className="text-base font-semibold text-slate-100">{item.title}</h3>
-                        <p className="text-xs text-slate-400 mt-1">
-                          {item.date} • {item.author}
-                        </p>
-                      </div>
-                      {item.topic && (
-                        <span className="inline-block rounded-full bg-slate-800 px-2 py-1 text-[11px] font-semibold text-slate-200">
-                          {item.topic}
-                        </span>
-                      )}
-                    </div>
-                    <p
-                      className="mt-3 text-sm text-slate-400"
-                      style={{
-                        display: "-webkit-box",
-                        WebkitLineClamp: 3,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                      }}
-                    >
-                      {item.excerpt}
-                    </p>
-                    <dl className="mt-3 grid gap-2 text-xs text-slate-400">
-                      <div className="flex gap-2">
-                        <dt className="text-slate-500">Slug:</dt>
-                        <dd className="text-slate-200">{item.slug}</dd>
-                      </div>
-                      {item.featured && (
-                        <div className="flex gap-2">
-                          <dt className="text-slate-500">Featured:</dt>
-                          <dd className="text-slate-200">Yes</dd>
-                        </div>
-                      )}
-                    </dl>
-                    <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => handleLoadIntoEditor(item)}
-                        className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 transition hover:border-[#1098D5] hover:text-[#1098D5]"
-                      >
-                        Load in editor
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyDraft(item)}
-                        className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 transition hover:border-[#1098D5] hover:text-[#1098D5]"
-                      >
-                        Copy JSON
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMoveToTrash(item.slug)}
-                        className="rounded-full border border-red-500/60 px-3 py-1 text-red-300 transition hover:border-red-400 hover:text-red-200"
-                      >
-                        Move to trash
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )
-          ) : trash.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              Deleted posts will appear here. Restore them to republish or delete them forever.
-            </p>
-          ) : (
-            <ul className="grid gap-4 md:grid-cols-2">
-              {trash.map((item) => (
-                <li
-                  key={`trash-${item.slug}`}
-                  className="rounded-xl border border-slate-800 bg-slate-900/60 p-5"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-100">{item.title}</h3>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {item.date} • {item.author}
-                      </p>
-                    </div>
-                    {item.topic && (
-                      <span className="inline-block rounded-full border border-slate-700 px-2 py-1 text-[11px] text-slate-300">
-                        {item.topic}
-                      </span>
-                    )}
-                  </div>
-                  <p
-                    className="mt-3 text-sm text-slate-500"
-                    style={{
-                      display: "-webkit-box",
-                      WebkitLineClamp: 3,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {item.excerpt}
-                  </p>
-                  <dl className="mt-3 grid gap-2 text-xs text-slate-500">
-                    <div className="flex gap-2">
-                      <dt className="text-slate-600">Slug:</dt>
-                      <dd>{item.slug}</dd>
-                    </div>
-                  </dl>
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => handleLoadIntoEditor(item)}
-                      className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 transition hover:border-[#1098D5] hover:text-[#1098D5]"
-                    >
-                      Load in editor
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyDraft(item)}
-                      className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 transition hover:border-[#1098D5] hover:text-[#1098D5]"
-                    >
-                      Copy JSON
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRestore(item.slug)}
-                      className="rounded-full border border-emerald-500/60 px-3 py-1 text-emerald-300 transition hover:border-emerald-400 hover:text-emerald-200"
-                    >
-                      Restore
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteForever(item.slug)}
-                      className="rounded-full border border-red-500/60 px-3 py-1 text-red-300 transition hover:border-red-400 hover:text-red-200"
-                    >
-                      Delete forever
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
 
         <section className="space-y-4">
           <div className="flex items-center justify-between">
